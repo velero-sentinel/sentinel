@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: velero-sentinel
+spec:
+  selector:
+    matchLabels:
+      app: velero-sentinel
+  template:
+    metadata:
+      labels:
+        app: velero-sentinel
+    spec:
+      containers:
+      - name: velero-sentinel
+        image: velerosentinel/sentinel
+        args:
+          - "server"
+        ports:
+        - containerPort: 3000
