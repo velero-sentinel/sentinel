@@ -88,8 +88,8 @@ func Setup(config *viper.Viper, logger hclog.Logger) (chan<- Message, error) {
 	downstreamError := make([]chan<- ErrorMessage, 0)
 
 	for _, ch := range channels {
-		downstreamWarn = append(downstreamWarn, ch.WarningChannel())
-		downstreamError = append(downstreamError, ch.ErrorChannel())
+		downstreamWarn = append(downstreamWarn, ch.WarningC())
+		downstreamError = append(downstreamError, ch.ErrorC())
 	}
 
 	go func() {

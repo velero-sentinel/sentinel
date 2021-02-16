@@ -18,8 +18,6 @@ package notification
 
 // Notifier describes the behavior of notifiers.
 type Notifier interface {
-	Warn(msg Message)
-	Error(msg Message)
-	WarningChannel() chan<- WarningMessage
-	ErrorChannel() chan<- ErrorMessage
+	WarningC() chan<- WarningMessage
+	ErrorC() chan<- ErrorMessage
 }

@@ -45,19 +45,11 @@ type hclogNotifier struct {
 	errors   chan ErrorMessage
 }
 
-func (n hclogNotifier) Warn(m Message) {
-	n.logger.Warn(m.Message())
-}
-
-func (n hclogNotifier) Error(m Message) {
-	n.logger.Error(m.Message())
-}
-
-func (n *hclogNotifier) WarningChannel() chan<- WarningMessage {
+func (n *hclogNotifier) WarningC() chan<- WarningMessage {
 	return n.warnings
 }
 
-func (n *hclogNotifier) ErrorChannel() chan<- ErrorMessage {
+func (n *hclogNotifier) ErrorC() chan<- ErrorMessage {
 	return n.errors
 }
 
