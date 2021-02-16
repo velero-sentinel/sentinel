@@ -18,7 +18,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -47,13 +46,6 @@ to quickly create a Cobra application.`,
 
 		appLogger.Info("Connecting to kubernetes master")
 
-		c, err := notification.Setup(viper.Sub("notification"), appLogger.Named("notifications"))
-
-		if err != nil {
-			appLogger.Error("Setting up notifications", "error", err)
-			panic(err)
-		}
-
 		appLogger.Info("Loading config")
 		cfg, err := client.LoadConfig()
 		if err != nil {
@@ -75,6 +67,13 @@ to quickly create a Cobra application.`,
 
 		if err != nil {
 			appLogger.Error("Setting up watcher", "error", err)
+			panic(err)
+		}
+
+		c, err := notification.Setup(viper.Sub("notification"), appLogger.Named("notifications"))
+
+		if err != nil {
+			appLogger.Error("Setting up notifications", "error", err)
 			panic(err)
 		}
 
@@ -110,11 +109,9 @@ to quickly create a Cobra application.`,
 				case v1.BackupPhaseInProgress:
 					appLogger.Info("Backup in progress", "name", backup.Name, "state", evt.Type)
 				case v1.BackupPhasePartiallyFailed:
-					appLogger.Warn("Backup partially failed", "name", backup.Name)
-					c <- notification.WarningMessage(fmt.Sprintf("%#v", backup))
+					c <- notification.WarningMessage{Backup: backup}
 				case v1.BackupPhaseFailed:
-					appLogger.Error("Backup failed", "name", backup.Name)
-					c <- notification.ErrorMessage(fmt.Sprintf("%#v", backup))
+					c <- notification.ErrorMessage{Backup: backup}
 				}
 			}
 		}

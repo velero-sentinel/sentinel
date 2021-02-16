@@ -30,11 +30,19 @@ func NewLogNotifier(cfg map[string]interface{}) (Notifier, error) {
 			Level: hclog.LevelFromString(cfg["level"].(string)),
 		})
 
-	return hclogNotifier{logger: logger}, nil
+	ln := &hclogNotifier{
+		logger:   logger,
+		warnings: make(chan WarningMessage),
+		errors:   make(chan ErrorMessage),
+	}
+	go ln.run()
+	return ln, nil
 }
 
 type hclogNotifier struct {
-	logger hclog.Logger
+	logger   hclog.Logger
+	warnings chan WarningMessage
+	errors   chan ErrorMessage
 }
 
 func (n hclogNotifier) Warn(m Message) {
@@ -43,4 +51,23 @@ func (n hclogNotifier) Warn(m Message) {
 
 func (n hclogNotifier) Error(m Message) {
 	n.logger.Error(m.Message())
+}
+
+func (n *hclogNotifier) WarningChannel() chan<- WarningMessage {
+	return n.warnings
+}
+
+func (n *hclogNotifier) ErrorChannel() chan<- ErrorMessage {
+	return n.errors
+}
+
+func (n *hclogNotifier) run() {
+	for {
+		select {
+		case warning := <-n.warnings:
+			n.logger.Warn("Problem with backup detected", "state", warning.GetBackup().Status.Phase, "message", warning.Message())
+		case err := <-n.errors:
+			n.logger.Error("Backup error", "state", err.GetBackup().Status.Phase, "message", err.Message())
+		}
+	}
 }
