@@ -13,17 +13,22 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package cmd
 
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/velero-sentinel/sentinel/notification"
+
+	v1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+
+	"github.com/vmware-tanzu/velero/pkg/client"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
+	"k8s.io/apimachinery/pkg/watch"
 )
 
 // serverCmd represents the server command
@@ -41,46 +46,86 @@ to quickly create a Cobra application.`,
 
 		appLogger.Info("Connecting to kubernetes master")
 
-		c := make(chan Message)
+		c := make(chan notification.Message)
 
 		go func() {
-			config, err := rest.InClusterConfig()
+
+			appLogger.Info("Loading config")
+			cfg, err := client.LoadConfig()
 			if err != nil {
-				panic(err.Error())
+				appLogger.Error("Loading config", "error", err)
 			}
 
-			clientset, err := kubernetes.NewForConfig(config)
+			appLogger.Info("Setting up client factory")
+			factory := client.NewFactory("sentinel", cfg)
+
+			appLogger.Info("Setting up client")
+			myclient, err := factory.Client()
+
 			if err != nil {
-				panic(err.Error())
+				appLogger.Error("Setting up client", "error", err)
 			}
 
-			serverLogger := appLogger.Named("server")
-			for range time.NewTicker(5 * time.Second).C {
-				serverLogger.Debug("Starting List")
-				pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
-				if err != nil {
-					panic(err.Error())
-				}
-				if serverLogger.IsDebug() {
-					for _, i := range pods.Items {
-						serverLogger.Debug("Found POD", "name", i.GetName())
+			appLogger.Info("Setting up watcher")
+			watcher, err := myclient.VeleroV1().Backups("velero").Watch(context.Background(), metav1.ListOptions{})
+
+			if err != nil {
+				appLogger.Error("Setting up watcher", "error", err)
+				panic(err)
+			}
+
+			for {
+				select {
+				case evt := <-watcher.ResultChan():
+
+					backup, ok := evt.Object.(*v1.Backup)
+
+					if !ok {
+						appLogger.Error("Non-Backup event registered", "evt", backup)
+						continue
+					}
+
+					switch evt.Type {
+					case watch.Added:
+						appLogger.Info("Backup added", "name", backup.Name)
+						continue
+					case watch.Deleted:
+						appLogger.Info("Backup deleted", "name", backup.Name)
+						continue
+					}
+
+					switch backup.Status.Phase {
+					case v1.BackupPhaseNew:
+						// There IS a state "new"... However, I do not think this actually will come
+						// up a lot, unless you have many potentially concurrent backup
+						appLogger.Info("New backup detected", "name", backup.Name, "state", evt.Type)
+					case v1.BackupPhaseCompleted:
+						appLogger.Info("Backup completed", "name", backup.Name, "state", evt.Type)
+					case v1.BackupPhaseDeleting:
+						appLogger.Info("Backup deletion", "name", backup.Name, "state", evt.Type)
+					case v1.BackupPhaseInProgress:
+						appLogger.Info("Backup in progress", "name", backup.Name, "state", evt.Type)
+					case v1.BackupPhasePartiallyFailed:
+						appLogger.Warn("Backup partially failed", "name", backup.Name)
+						c <- notification.WarningMessage(fmt.Sprintf("%#v", backup))
+					case v1.BackupPhaseFailed:
+						appLogger.Error("Backup failed", "name", backup.Name)
+						c <- notification.ErrorMessage(fmt.Sprintf("%#v", backup))
 					}
 				}
-				c <- WarningMessage(fmt.Sprintf("Number of Pods: %d", len(pods.Items)))
-				serverLogger.Debug("Ending List")
 			}
+
 		}()
 
 		notifyLogger := appLogger.Named("notify")
 
 		n := LogNotifier(notifyLogger)
 		for m := range c {
-			notifyLogger.Debug("received message", "content", m)
 			switch m.(type) {
-			case WarningMessage:
+			case notification.WarningMessage:
 				notifyLogger.Debug("sent message downstream", "type", "warning", "content", m)
 				n.Warn(m)
-			case ErrorMessage:
+			case notification.ErrorMessage:
 				notifyLogger.Debug("sent message downstream", "type", "error", "content", m)
 				n.Error(m)
 			}
