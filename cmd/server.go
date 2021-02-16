@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/velero-sentinel/sentinel/notification"
 
 	v1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
@@ -46,90 +47,78 @@ to quickly create a Cobra application.`,
 
 		appLogger.Info("Connecting to kubernetes master")
 
-		c := make(chan notification.Message)
+		c, err := notification.Setup(viper.Sub("notification"), appLogger.Named("notifications"))
 
-		go func() {
+		if err != nil {
+			appLogger.Error("Setting up notifications", "error", err)
+			panic(err)
+		}
 
-			appLogger.Info("Loading config")
-			cfg, err := client.LoadConfig()
-			if err != nil {
-				appLogger.Error("Loading config", "error", err)
-			}
+		appLogger.Info("Loading config")
+		cfg, err := client.LoadConfig()
+		if err != nil {
+			appLogger.Error("Loading config", "error", err)
+		}
 
-			appLogger.Info("Setting up client factory")
-			factory := client.NewFactory("sentinel", cfg)
+		appLogger.Info("Setting up client factory")
+		factory := client.NewFactory("sentinel", cfg)
 
-			appLogger.Info("Setting up client")
-			myclient, err := factory.Client()
+		appLogger.Info("Setting up client")
+		myclient, err := factory.Client()
 
-			if err != nil {
-				appLogger.Error("Setting up client", "error", err)
-			}
+		if err != nil {
+			appLogger.Error("Setting up client", "error", err)
+		}
 
-			appLogger.Info("Setting up watcher")
-			watcher, err := myclient.VeleroV1().Backups("velero").Watch(context.Background(), metav1.ListOptions{})
+		appLogger.Info("Setting up watcher")
+		watcher, err := myclient.VeleroV1().Backups("velero").Watch(context.Background(), metav1.ListOptions{})
 
-			if err != nil {
-				appLogger.Error("Setting up watcher", "error", err)
-				panic(err)
-			}
+		if err != nil {
+			appLogger.Error("Setting up watcher", "error", err)
+			panic(err)
+		}
 
-			for {
-				select {
-				case evt := <-watcher.ResultChan():
+		for {
+			select {
+			case evt := <-watcher.ResultChan():
 
-					backup, ok := evt.Object.(*v1.Backup)
+				backup, ok := evt.Object.(*v1.Backup)
 
-					if !ok {
-						appLogger.Error("Non-Backup event registered", "evt", backup)
-						continue
-					}
+				if !ok {
+					appLogger.Error("Non-Backup event registered", "evt", backup)
+					continue
+				}
 
-					switch evt.Type {
-					case watch.Added:
-						appLogger.Info("Backup added", "name", backup.Name)
-						continue
-					case watch.Deleted:
-						appLogger.Info("Backup deleted", "name", backup.Name)
-						continue
-					}
+				switch evt.Type {
+				case watch.Added:
+					appLogger.Info("Backup added", "name", backup.Name)
+					continue
+				case watch.Deleted:
+					appLogger.Info("Backup deleted", "name", backup.Name)
+					continue
+				}
 
-					switch backup.Status.Phase {
-					case v1.BackupPhaseNew:
-						// There IS a state "new"... However, I do not think this actually will come
-						// up a lot, unless you have many potentially concurrent backup
-						appLogger.Info("New backup detected", "name", backup.Name, "state", evt.Type)
-					case v1.BackupPhaseCompleted:
-						appLogger.Info("Backup completed", "name", backup.Name, "state", evt.Type)
-					case v1.BackupPhaseDeleting:
-						appLogger.Info("Backup deletion", "name", backup.Name, "state", evt.Type)
-					case v1.BackupPhaseInProgress:
-						appLogger.Info("Backup in progress", "name", backup.Name, "state", evt.Type)
-					case v1.BackupPhasePartiallyFailed:
-						appLogger.Warn("Backup partially failed", "name", backup.Name)
-						c <- notification.WarningMessage(fmt.Sprintf("%#v", backup))
-					case v1.BackupPhaseFailed:
-						appLogger.Error("Backup failed", "name", backup.Name)
-						c <- notification.ErrorMessage(fmt.Sprintf("%#v", backup))
-					}
+				switch backup.Status.Phase {
+				case v1.BackupPhaseNew:
+					// There IS a state "new"... However, I do not think this actually will come
+					// up a lot, unless you have many potentially concurrent backup
+					appLogger.Info("New backup detected", "name", backup.Name, "state", evt.Type)
+				case v1.BackupPhaseCompleted:
+					appLogger.Info("Backup completed", "name", backup.Name, "state", evt.Type)
+				case v1.BackupPhaseDeleting:
+					appLogger.Info("Backup deletion", "name", backup.Name, "state", evt.Type)
+				case v1.BackupPhaseInProgress:
+					appLogger.Info("Backup in progress", "name", backup.Name, "state", evt.Type)
+				case v1.BackupPhasePartiallyFailed:
+					appLogger.Warn("Backup partially failed", "name", backup.Name)
+					c <- notification.WarningMessage(fmt.Sprintf("%#v", backup))
+				case v1.BackupPhaseFailed:
+					appLogger.Error("Backup failed", "name", backup.Name)
+					c <- notification.ErrorMessage(fmt.Sprintf("%#v", backup))
 				}
 			}
-
-		}()
-
-		notifyLogger := appLogger.Named("notify")
-
-		n := LogNotifier(notifyLogger)
-		for m := range c {
-			switch m.(type) {
-			case notification.WarningMessage:
-				notifyLogger.Debug("sent message downstream", "type", "warning", "content", m)
-				n.Warn(m)
-			case notification.ErrorMessage:
-				notifyLogger.Debug("sent message downstream", "type", "error", "content", m)
-				n.Error(m)
-			}
 		}
+
 	},
 }
 

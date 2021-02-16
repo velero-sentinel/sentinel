@@ -18,6 +18,6 @@ package notification
 
 // Notifier describes the behavior of notifiers.
 type Notifier interface {
-	Warn(Message)
-	Error(Message)
+	Warn(msg Message)
+	Error(msg Message)
 }

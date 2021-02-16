@@ -21,6 +21,7 @@ type Message interface {
 	Message() string
 }
 
+// ErrorMessage is sent to a notifier in case a backup has failed.
 type ErrorMessage string
 
 func (e ErrorMessage) Message() string {
