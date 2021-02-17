@@ -3,12 +3,16 @@ module github.com/velero-sentinel/sentinel
 go 1.15
 
 require (
+	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/hashicorp/go-hclog v0.15.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/viper v1.7.1
+	github.com/stretchr/testify v1.7.0
 	github.com/vmware-tanzu/velero v1.5.3
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/apimachinery v0.18.4
+	k8s.io/apiserver v0.18.4
 	k8s.io/client-go v0.18.4
 )
 
