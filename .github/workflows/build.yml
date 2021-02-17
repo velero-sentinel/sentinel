@@ -11,9 +11,15 @@ jobs:
     name: SonarCloud
     runs-on: ubuntu-latest
     steps:
+      - name: Install Go
+        uses: actions/setup-go@v2
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Test
+        run: |
+          echo -n > test-report.json
+          go test -coverprofile=cover.out -json ./... >> testreport.json
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
