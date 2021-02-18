@@ -10,7 +10,7 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
-	"github.com/velero-sentinel/sentinel/notification"
+	"github.com/velero-sentinel/sentinel/message"
 	v1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 )
 
@@ -50,13 +50,6 @@ func TestRetry(t *testing.T) {
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			warnTmpl, err := template.New("warn").Parse(defaultWarnTemplate)
-			assert.NoError(t, err)
-			assert.NotNil(t, warnTmpl)
-
-			errTmpl, err := template.New("error").Parse(defaultErrTemplate)
-			assert.NoError(t, err)
-			assert.NotNil(t, errTmpl)
 
 			numrequest := 0
 
@@ -85,15 +78,15 @@ func TestRetry(t *testing.T) {
 			if tC.invalidRequest {
 				u = &url.URL{Host: "http://ä<<>>@!/foo"}
 			}
-			wc := make(chan notification.WarningMessage)
-			ec := make(chan notification.ErrorMessage)
+			wc := make(chan message.WarningMessage)
+			ec := make(chan message.ErrorMessage)
 			done := make(chan bool)
 			n := webhookNotifier{
 				name:     "testWarn",
 				logger:   hclog.NewNullLogger(),
 				client:   *http.DefaultClient,
-				warnTmpl: warnTmpl,
-				errTmpl:  errTmpl,
+				warnTmpl: defaultWarnTemplate,
+				errTmpl:  defaultErrTemplate,
 				url:      u,
 				method:   http.MethodPost,
 				warnings: wc,
@@ -101,7 +94,7 @@ func TestRetry(t *testing.T) {
 				done:     done,
 			}
 			go func() {
-				msg := new(notification.WarningMessage)
+				msg := new(message.WarningMessage)
 				msg.Backup = new(v1.Backup)
 				assert.NotNil(t, msg.Backup)
 				msg.Backup.Name = "testbackup"
@@ -116,15 +109,15 @@ func TestRetry(t *testing.T) {
 }
 
 func TestWebhooks(t *testing.T) {
-	wc := make(chan notification.WarningMessage)
-	ec := make(chan notification.ErrorMessage)
+	wc := make(chan message.WarningMessage)
+	ec := make(chan message.ErrorMessage)
 	testCases := []struct {
 		desc  string
 		kind  string
-		tmpl  string
+		tmpl  *template.Template
 		phase v1.BackupPhase
-		warnC chan notification.WarningMessage
-		errC  chan notification.ErrorMessage
+		warnC chan message.WarningMessage
+		errC  chan message.ErrorMessage
 	}{
 		{
 			desc:  "Warning Webhook",
@@ -146,10 +139,6 @@ func TestWebhooks(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
 
-			tmpl, err := template.New(tC.kind).Parse(tC.tmpl)
-			assert.NoError(t, err)
-			assert.NotNil(t, tmpl)
-
 			srv := httptest.NewServer(http.HandlerFunc(
 				func(w http.ResponseWriter, r *http.Request) {
 					dec := json.NewDecoder(r.Body)
@@ -168,8 +157,8 @@ func TestWebhooks(t *testing.T) {
 				name:     tC.desc,
 				logger:   hclog.NewNullLogger(),
 				client:   *http.DefaultClient,
-				warnTmpl: tmpl,
-				errTmpl:  tmpl,
+				warnTmpl: defaultWarnTemplate,
+				errTmpl:  defaultErrTemplate,
 				url:      u,
 				method:   http.MethodPost,
 				warnings: wc,
@@ -180,14 +169,14 @@ func TestWebhooks(t *testing.T) {
 
 				switch tC.kind {
 				case "warning":
-					msg := new(notification.WarningMessage)
+					msg := new(message.WarningMessage)
 					msg.Backup = new(v1.Backup)
 					assert.NotNil(t, msg.Backup)
 					msg.Backup.Name = "testbackup"
 					msg.Backup.Status.Phase = tC.phase
 					n.WarningC() <- *msg
 				case "error":
-					msg := new(notification.ErrorMessage)
+					msg := new(message.ErrorMessage)
 					msg.Backup = new(v1.Backup)
 					assert.NotNil(t, msg.Backup)
 					msg.Backup.Name = "testbackup"
@@ -204,14 +193,6 @@ func TestWebhooks(t *testing.T) {
 
 func TestWarning(t *testing.T) {
 
-	warnTmpl, err := template.New("warn").Parse(defaultWarnTemplate)
-	assert.NoError(t, err)
-	assert.NotNil(t, warnTmpl)
-
-	errTmpl, err := template.New("error").Parse(defaultErrTemplate)
-	assert.NoError(t, err)
-	assert.NotNil(t, errTmpl)
-
 	srv := httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			dec := json.NewDecoder(r.Body)
@@ -226,15 +207,15 @@ func TestWarning(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, u)
 
-	wc := make(chan notification.WarningMessage)
-	ec := make(chan notification.ErrorMessage)
+	wc := make(chan message.WarningMessage)
+	ec := make(chan message.ErrorMessage)
 	done := make(chan bool)
 	n := webhookNotifier{
 		name:     "testWarn",
 		logger:   hclog.NewNullLogger(),
 		client:   *http.DefaultClient,
-		warnTmpl: warnTmpl,
-		errTmpl:  errTmpl,
+		warnTmpl: defaultWarnTemplate,
+		errTmpl:  defaultErrTemplate,
 		url:      u,
 		method:   http.MethodPost,
 		warnings: wc,
@@ -242,7 +223,7 @@ func TestWarning(t *testing.T) {
 		done:     done,
 	}
 	go func() {
-		msg := new(notification.WarningMessage)
+		msg := new(message.WarningMessage)
 		msg.Backup = new(v1.Backup)
 		assert.NotNil(t, msg.Backup)
 		msg.Backup.Name = "testbackup"

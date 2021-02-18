@@ -16,8 +16,12 @@ limitations under the License.
 
 package notification
 
+import "github.com/velero-sentinel/sentinel/message"
+
 // Notifier describes the behavior of notifiers.
 type Notifier interface {
-	WarningC() chan<- WarningMessage
-	ErrorC() chan<- ErrorMessage
+	WarningC() chan<- message.WarningMessage
+	ErrorC() chan<- message.ErrorMessage
+	Run()
+	Stop()
 }

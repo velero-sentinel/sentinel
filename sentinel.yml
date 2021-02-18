@@ -1,0 +1,5 @@
+webhooks:
+  - name: "wh1"
+    url: "https://example.com/wh1"
+  - name: "wh2"
+    url: "https://example.com/wh2"

@@ -19,6 +19,7 @@ package webhook
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -27,10 +28,11 @@ import (
 
 	"github.com/avast/retry-go"
 	"github.com/hashicorp/go-hclog"
-	"github.com/velero-sentinel/sentinel/notification"
+	"github.com/velero-sentinel/sentinel/message"
 )
 
-const defaultWarnTemplate = `
+const (
+	defaultWarnTemplateString = `
 {
     "type": "warning",
     "backup":{
@@ -40,42 +42,72 @@ const defaultWarnTemplate = `
 }
 `
 
-const defaultErrTemplate = `
+	defaultErrTemplateString = `
 {
     "type":"error",
     "backup":{
         "name": "{{.Name}}",
         "state": "{{.Status.Phase}}"
     }
+}`
+)
+
+var defaultWarnTemplate = template.Must(template.New("warn").Parse(defaultWarnTemplateString))
+var defaultErrTemplate = template.Must(template.New("error").Parse(defaultErrTemplateString))
+
+type Config struct {
+	Name   string
+	URL    string
+	Method string
 }
-`
 
-// func New(cfg map[string]interface{}) (Notifier, error) {
+func New(cfg *Config, logger hclog.Logger) (*webhookNotifier, error) {
+	u, err := url.Parse(cfg.URL)
+	if err != nil {
+		return nil, fmt.Errorf("parsing URL: %s", err)
+	}
+	return &webhookNotifier{
+		name:   cfg.Name,
+		client: *http.DefaultClient,
+		url:    u,
+		method: cfg.Method,
 
-// }
+		logger: logger,
+
+		warnTmpl: defaultWarnTemplate,
+		errTmpl:  defaultErrTemplate,
+
+		warnings: make(chan message.WarningMessage),
+		errors:   make(chan message.ErrorMessage),
+		done:     make(chan bool),
+	}, nil
+}
 
 type webhookNotifier struct {
-	name     string
-	logger   hclog.Logger
-	client   http.Client
+	name   string
+	client http.Client
+	url    *url.URL
+	method string
+
+	logger hclog.Logger
+
 	warnTmpl *template.Template
 	errTmpl  *template.Template
-	url      *url.URL
-	method   string
-	warnings chan notification.WarningMessage
-	errors   chan notification.ErrorMessage
+
+	warnings chan message.WarningMessage
+	errors   chan message.ErrorMessage
 	done     chan bool
 }
 
-func (n *webhookNotifier) WarningC() chan<- notification.WarningMessage {
+func (n *webhookNotifier) WarningC() chan<- message.WarningMessage {
 	return n.warnings
 }
 
-func (n *webhookNotifier) ErrorC() chan<- notification.ErrorMessage {
+func (n *webhookNotifier) ErrorC() chan<- message.ErrorMessage {
 	return n.errors
 }
 
-func (n *webhookNotifier) run() {
+func (n *webhookNotifier) Run() {
 	buf := bytes.NewBuffer(nil)
 	for {
 		buf.Reset()
@@ -117,4 +149,10 @@ func (n *webhookNotifier) run() {
 			n.logger.Error("Sending webhook failed", "name", n.name, "url", n.url.String(), "error", err, "attempts", 3)
 		}
 	}
+}
+
+func (n *webhookNotifier) Stop() {
+	n.logger.Info("Received shutdown command")
+	n.done <- true
+	n.logger.Info("Shutdown complete")
 }
