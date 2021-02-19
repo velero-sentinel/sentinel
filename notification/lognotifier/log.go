@@ -27,10 +27,10 @@ func (n *hclogNotifier) Run() chan<- message.Message {
 		for m := range c {
 			n.logger.Debug("Received message from upstream")
 			switch m.(type) {
-			case message.WarningMessage:
+			case message.Warning:
 				n.logger.Warn(m.Message(), "backup", m.GetBackup().Name)
 
-			case message.ErrorMessage:
+			case message.Error:
 				n.logger.Error(m.Message(), "backup", m.GetBackup().Name)
 			}
 		}

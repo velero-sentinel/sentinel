@@ -98,9 +98,9 @@ func (n *webhookNotifier) Run() chan<- message.Message {
 		for m := range c {
 			buf.Reset()
 			switch m.(type) {
-			case *message.WarningMessage, message.WarningMessage:
+			case *message.Warning, message.Warning:
 				n.warnTmpl.Execute(buf, m.GetBackup())
-			case *message.ErrorMessage, message.ErrorMessage:
+			case *message.Error, message.Error:
 				n.errTmpl.Execute(buf, m.GetBackup())
 			}
 

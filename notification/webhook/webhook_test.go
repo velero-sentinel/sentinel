@@ -67,7 +67,7 @@ func TestRetry(t *testing.T) {
 			cfg := &Config{Name: tC.desc, URL: srv.URL, Method: http.MethodPost}
 			n, _ := New(cfg, hclog.NewNullLogger())
 			c := n.Run()
-			msg := new(message.WarningMessage)
+			msg := new(message.Warning)
 			msg.Backup = new(v1.Backup)
 			assert.NotNil(t, msg.Backup)
 			msg.Backup.Name = "testbackup"
@@ -124,14 +124,14 @@ func TestWebhooks(t *testing.T) {
 
 			switch tC.kind {
 			case "warning":
-				msg := new(message.WarningMessage)
+				msg := new(message.Warning)
 				msg.Backup = new(v1.Backup)
 				assert.NotNil(t, msg.Backup)
 				msg.Backup.Name = "testbackup"
 				msg.Backup.Status.Phase = tC.phase
 				c <- *msg
 			case "error":
-				msg := new(message.ErrorMessage)
+				msg := new(message.Error)
 				msg.Backup = new(v1.Backup)
 				assert.NotNil(t, msg.Backup)
 				msg.Backup.Name = "testbackup"

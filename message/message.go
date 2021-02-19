@@ -28,27 +28,27 @@ type Message interface {
 	GetBackup() *v1.Backup
 }
 
-// ErrorMessage is sent to a notifier in case a backup has failed.
-type ErrorMessage struct {
+// Error is sent to a notifier in case a backup has failed.
+type Error struct {
 	Backup *v1.Backup
 }
 
-func (e ErrorMessage) Message() string {
+func (e Error) Message() string {
 	return fmt.Sprintf("%s is in state %s", e.Backup.Name, e.Backup.Status.Phase)
 }
 
-func (e ErrorMessage) GetBackup() *v1.Backup {
+func (e Error) GetBackup() *v1.Backup {
 	return e.Backup
 }
 
-type WarningMessage struct {
+type Warning struct {
 	Backup *v1.Backup
 }
 
-func (w WarningMessage) Message() string {
+func (w Warning) Message() string {
 	return fmt.Sprintf("%s is in state %s", w.Backup.Name, w.Backup.Status.Phase)
 }
 
-func (w WarningMessage) GetBackup() *v1.Backup {
+func (w Warning) GetBackup() *v1.Backup {
 	return w.Backup
 }

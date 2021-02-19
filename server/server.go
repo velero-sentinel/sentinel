@@ -91,15 +91,15 @@ func (s *server) Run() error {
 				s.logger.Info("New backup detected", "name", backup.Name, "state", evt.Type)
 			case v1.BackupPhaseCompleted:
 				s.logger.Info("Backup completed", "name", backup.Name, "state", evt.Type)
-				s.downstream <- message.WarningMessage{Backup: backup}
+				s.downstream <- message.Warning{Backup: backup}
 			case v1.BackupPhaseDeleting:
 				s.logger.Info("Backup deletion", "name", backup.Name, "state", evt.Type)
 			case v1.BackupPhaseInProgress:
 				s.logger.Info("Backup in progress", "name", backup.Name, "state", evt.Type)
 			case v1.BackupPhasePartiallyFailed:
-				s.downstream <- message.WarningMessage{Backup: backup}
+				s.downstream <- message.Warning{Backup: backup}
 			case v1.BackupPhaseFailed:
-				s.downstream <- message.ErrorMessage{Backup: backup}
+				s.downstream <- message.Error{Backup: backup}
 			}
 
 		}
