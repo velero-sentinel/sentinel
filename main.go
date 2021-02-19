@@ -27,6 +27,8 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/go-hclog"
 	"github.com/velero-sentinel/sentinel/notification"
+	"github.com/velero-sentinel/sentinel/pipeline"
+
 	"github.com/velero-sentinel/sentinel/server"
 	"gopkg.in/yaml.v2"
 )
@@ -74,7 +76,7 @@ func main() {
 	appLogger = hclog.New(&hclog.LoggerOptions{Name: "sentinel", Color: hclog.ForceColor})
 
 	// ctx := kong.Parse(&config, kong.Configuration(kongyaml.Loader, "./sentinel.yml"))
-	_ = kong.Parse(&config, kong.Bind(appLogger))
+	ctx := kong.Parse(&config, kong.Bind(appLogger))
 
 	appLogger.Info("Starting up")
 
@@ -83,9 +85,7 @@ func main() {
 		f, _ := os.Open(config.NotifierConfig)
 		dec := yaml.NewDecoder(f)
 
-		if err := dec.Decode(&notifiers); err != nil {
-			panic(err)
-		}
+		ctx.FatalIfErrorf(dec.Decode(&notifiers))
 		if appLogger.IsDebug() {
 			appLogger.Debug("Read notifier configuration", "file", config.NotifierConfig)
 			spew.Dump(notifiers)
@@ -94,24 +94,17 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	p, _ := notification.Configure(&notifiers, appLogger.Named("notification"))
-	go p.Run()
+	p, err := pipeline.New(&notifiers, appLogger.Named("notification"))
+	ctx.FatalIfErrorf(err)
+	appLogger.Info("Configured pipeline")
 
-	ch := p.Channel()
-	if ch == nil {
-		panic("Pipeline channel is nil")
-	}
-
-	appLogger.Info("Started pipeline")
-
-	s, _ := server.New(p.Channel(), appLogger.Named("server"))
+	s, _ := server.New(p.Run(), appLogger.Named("server"))
 	s.Run()
 	appLogger.Info("Started server")
 
 	sig := <-sigs
 	appLogger.Info("Received signal", "signal", sig.String())
 	s.Stop()
-	p.Stop()
 
 	appLogger.Info("Saying goodbye!")
 }
