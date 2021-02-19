@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -105,37 +104,38 @@ func (n *webhookNotifier) Run() chan<- message.Message {
 				n.errTmpl.Execute(buf, m.GetBackup())
 			}
 
-			br := bytes.NewReader(buf.Bytes())
-			rc := ioutil.NopCloser(br)
-
-			err := retry.Do(
+			if err := retry.Do(
 				func() error {
-					req, err := http.NewRequest(n.method, n.url.String(), rc)
-					if err != nil {
-						return retry.Unrecoverable(err)
-					}
-					resp, err := n.client.Do(req)
-
-					if resp == nil || resp.StatusCode > 399 {
-						br.Seek(0, io.SeekStart)
-						return errors.New("Request unsuccessful")
-					}
-					return err
+					return call(&n.client, n.method, n.url, buf.Bytes())
 				},
 				retry.OnRetry(
 					func(num uint, err error) {
 						n.logger.Warn("Sending webhook temporarily failed", "name", n.name, "url", n.url.String(), "error", err, "attempt", num+1)
 					},
 				),
-
 				retry.Attempts(3),
 				retry.LastErrorOnly(true),
-			)
-			if err != nil {
+			); err != nil {
 				n.logger.Error("Sending webhook failed", "name", n.name, "url", n.url.String(), "error", err, "attempts", 3)
 			}
 		}
 		n.logger.Info("Shut down")
 	}()
 	return c
+}
+
+func call(client *http.Client, method string, url *url.URL, b []byte) error {
+
+	rc := ioutil.NopCloser(bytes.NewReader(b))
+
+	req, err := http.NewRequest(method, url.String(), rc)
+	if err != nil {
+		return retry.Unrecoverable(err)
+	}
+
+	resp, err := client.Do(req)
+	if resp == nil || resp.StatusCode > 399 {
+		return errors.New("Request unsuccessful")
+	}
+	return err
 }
