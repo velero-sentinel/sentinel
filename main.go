@@ -18,15 +18,12 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/alecthomas/kong"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/go-hclog"
 	"github.com/velero-sentinel/sentinel/notification"
 	"github.com/velero-sentinel/sentinel/pipeline"
@@ -38,24 +35,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var notifierTypes = []string{"log", "webhook"}
-
-type NotifierType int
-
-func (n *NotifierType) UnmarshalText(text []byte) error {
-	s := strings.ToLower(string(text))
-	for i, v := range notifierTypes {
-		if v == s {
-			*n = NotifierType(i)
-			return nil
-		}
-	}
-	return errors.New("Unknown type of notifier: " + s)
-}
-
 const (
-	Log NotifierType = iota
-	Webhook
 	veleroNamespace = "velero"
 )
 
@@ -66,36 +46,39 @@ func (d debug) BeforeApply() error {
 	return nil
 }
 
+type cfgPath string
+
+func (p cfgPath) AfterApply() error {
+	if p == "" {
+		return nil
+	}
+
+	f, err := os.Open(string(p))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return yaml.NewDecoder(f).Decode(&notifiers)
+}
+
 var (
 	appLogger hclog.Logger = hclog.New(&hclog.LoggerOptions{Name: "sentinel", Color: hclog.ForceColor})
 
 	notifiers notification.NotifierConfig
 	config    struct {
-		Namespace      string `kong:"required,short='n',default='velero'"`
-		Debug          debug  `kong:"help='Enable debug logging',group='Logging'"`
-		Bind           string `kong:"required,default=':8080',group='Network',help='address to bind to'"`
-		NotifierConfig string `kong:"type:'existingfile'"`
+		Namespace      string  `kong:"required,short='n',default='velero'"`
+		Debug          debug   `kong:"help='Enable debug logging',group='Logging'"`
+		Bind           string  `kong:"required,default=':8080',group='Network',help='address to bind to'"`
+		NotifierConfig cfgPath `kong:"type:'existingfile'"`
 	}
 )
 
 func main() {
 
-	// ctx := kong.Parse(&config, kong.Configuration(kongyaml.Loader, "./sentinel.yml"))
 	ctx := kong.Parse(&config, kong.Bind(appLogger))
 
 	ctx.Printf("Starting up...\n")
 
-	if config.NotifierConfig != "" {
-		appLogger.Debug("Reading notfier config", "file", config.NotifierConfig)
-		f, _ := os.Open(config.NotifierConfig)
-		dec := yaml.NewDecoder(f)
-
-		ctx.FatalIfErrorf(dec.Decode(&notifiers))
-		if appLogger.IsDebug() {
-			appLogger.Debug("Read notifier configuration", "file", config.NotifierConfig)
-			spew.Dump(notifiers)
-		}
-	}
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
