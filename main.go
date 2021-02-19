@@ -17,7 +17,9 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -28,9 +30,12 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/velero-sentinel/sentinel/notification"
 	"github.com/velero-sentinel/sentinel/pipeline"
+	"github.com/vmware-tanzu/velero/pkg/client"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/velero-sentinel/sentinel/server"
 	"gopkg.in/yaml.v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var notifierTypes = []string{"log", "webhook"}
@@ -51,6 +56,7 @@ func (n *NotifierType) UnmarshalText(text []byte) error {
 const (
 	Log NotifierType = iota
 	Webhook
+	veleroNamespace = "velero"
 )
 
 type debug bool
@@ -61,7 +67,8 @@ func (d debug) BeforeApply() error {
 }
 
 var (
-	appLogger hclog.Logger
+	appLogger hclog.Logger = hclog.New(&hclog.LoggerOptions{Name: "sentinel", Color: hclog.ForceColor})
+
 	notifiers notification.NotifierConfig
 	config    struct {
 		Namespace      string `kong:"required,short='n',default='velero'"`
@@ -73,12 +80,10 @@ var (
 
 func main() {
 
-	appLogger = hclog.New(&hclog.LoggerOptions{Name: "sentinel", Color: hclog.ForceColor})
-
 	// ctx := kong.Parse(&config, kong.Configuration(kongyaml.Loader, "./sentinel.yml"))
 	ctx := kong.Parse(&config, kong.Bind(appLogger))
 
-	appLogger.Info("Starting up")
+	ctx.Printf("Starting up...\n")
 
 	if config.NotifierConfig != "" {
 		appLogger.Debug("Reading notfier config", "file", config.NotifierConfig)
@@ -96,15 +101,28 @@ func main() {
 
 	p, err := pipeline.New(&notifiers, appLogger.Named("notification"))
 	ctx.FatalIfErrorf(err)
-	appLogger.Info("Configured pipeline")
+	ctx.Printf("Configured pipeline\n")
+	watcher, _ := setupClient()
+	evts := watcher.ResultChan()
+	s := server.New(p.Run(), appLogger.Named("server"))
+	s.Run(evts)
 
-	s, _ := server.New(p.Run(), appLogger.Named("server"))
-	s.Run()
-	appLogger.Info("Started server")
+	ctx.Printf("Started server")
 
 	sig := <-sigs
 	appLogger.Info("Received signal", "signal", sig.String())
-	s.Stop()
-
+	watcher.Stop()
 	appLogger.Info("Saying goodbye!")
+}
+
+func setupClient() (watch.Interface, error) {
+	cfg, err := client.LoadConfig()
+	factory := client.NewFactory("sentinel", cfg)
+	myclient, err := factory.Client()
+
+	if err != nil {
+		return nil, fmt.Errorf("setting up client: %s", err)
+	}
+
+	return myclient.VeleroV1().Backups(veleroNamespace).Watch(context.Background(), metav1.ListOptions{})
 }

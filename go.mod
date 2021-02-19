@@ -7,9 +7,13 @@ require (
 	github.com/alecthomas/kong v0.2.15
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/davecgh/go-spew v1.1.1
+	github.com/fatih/color v1.10.0 // indirect
 	github.com/hashicorp/go-hclog v0.15.0
+	github.com/mwmahlberg/hclog-mock v0.0.1
+	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/stretchr/testify v1.7.0
 	github.com/vmware-tanzu/velero v1.5.3
+	golang.org/x/sys v0.0.0-20210219172841-57ea560cfca1 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/apimachinery v0.18.4

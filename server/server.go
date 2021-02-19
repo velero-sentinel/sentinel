@@ -17,98 +17,66 @@ limitations under the License.
 package server
 
 import (
-	"context"
 	"errors"
-	"fmt"
 
 	"github.com/hashicorp/go-hclog"
 	v1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
-	"github.com/vmware-tanzu/velero/pkg/client"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/velero-sentinel/sentinel/message"
 )
 
 type server struct {
-	logger     hclog.Logger
-	factory    client.Factory
-	downstream chan<- message.Message
-	done       chan bool
+	logger   hclog.Logger
+	pipeline chan<- message.Message
 }
 
-func New(downstream chan<- message.Message, logger hclog.Logger) (*server, error) {
-	s := &server{logger: logger, downstream: downstream, done: make(chan bool)}
-	cfg, err := client.LoadConfig()
-	if err != nil {
-		return nil, err
-	}
-	s.factory = client.NewFactory("sentinel", cfg)
-	return s, nil
+func New(pipeline chan<- message.Message, logger hclog.Logger) *server {
+	s := &server{logger: logger, pipeline: pipeline}
+	return s
 }
 
-func (s *server) Run() error {
-	if s.downstream == nil {
-		panic(errors.New("downstream is nil"))
-	}
-	s.logger.Info("Setting up client")
-	myclient, err := s.factory.Client()
-
-	if err != nil {
-		return fmt.Errorf("setting up client: %s", err)
+func (s *server) Run(evts <-chan watch.Event) error {
+	if s.pipeline == nil {
+		return errors.New("downstream is nil")
 	}
 
-	watcher, err := myclient.VeleroV1().Backups("velero").Watch(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("setting up watcher: %s", err)
-	}
-	for {
-		select {
-		case <-s.done:
-			close(s.downstream)
-			return nil
-		case evt := <-watcher.ResultChan():
+	defer close(s.pipeline)
 
-			backup, ok := evt.Object.(*v1.Backup)
+	for evt := range evts {
 
-			if !ok {
-				s.logger.Error("Non-Backup event registered", "evt", backup)
-				continue
-			}
+		backup, ok := evt.Object.(*v1.Backup)
 
-			switch evt.Type {
-			case watch.Added:
-				s.logger.Info("Backup added", "name", backup.Name)
-				continue
-			case watch.Deleted:
-				s.logger.Info("Backup deleted", "name", backup.Name)
-				continue
-			}
+		if !ok {
+			s.logger.Error("Non-Backup event registered", "evt", backup)
+			continue
+		}
 
-			switch backup.Status.Phase {
-			case v1.BackupPhaseNew:
-				// There IS a state "new"... However, I do not think this actually will come
-				// up a lot, unless you have many potentially concurrent backup
-				s.logger.Info("New backup detected", "name", backup.Name, "state", evt.Type)
-			case v1.BackupPhaseCompleted:
-				s.logger.Info("Backup completed", "name", backup.Name, "state", evt.Type)
-				s.downstream <- message.Warning{Backup: backup}
-			case v1.BackupPhaseDeleting:
-				s.logger.Info("Backup deletion", "name", backup.Name, "state", evt.Type)
-			case v1.BackupPhaseInProgress:
-				s.logger.Info("Backup in progress", "name", backup.Name, "state", evt.Type)
-			case v1.BackupPhasePartiallyFailed:
-				s.downstream <- message.Warning{Backup: backup}
-			case v1.BackupPhaseFailed:
-				s.downstream <- message.Error{Backup: backup}
-			}
+		switch evt.Type {
+		case watch.Added:
+			s.logger.Info("Backup added", "name", backup.Name)
+			continue
+		case watch.Deleted:
+			s.logger.Info("Backup deleted", "name", backup.Name)
+			continue
+		}
 
+		switch backup.Status.Phase {
+		case v1.BackupPhaseNew:
+			// There IS a state "new"... However, I do not think this actually will come
+			// up a lot, unless you have many potentially concurrent backup
+			s.logger.Info("New backup detected", "name", backup.Name, "state", evt.Type)
+		case v1.BackupPhaseCompleted:
+			s.logger.Info("Backup completed", "name", backup.Name, "state", evt.Type)
+		case v1.BackupPhaseDeleting:
+			s.logger.Info("Backup deletion", "name", backup.Name, "state", evt.Type)
+		case v1.BackupPhaseInProgress:
+			s.logger.Info("Backup in progress", "name", backup.Name, "state", evt.Type)
+		case v1.BackupPhasePartiallyFailed:
+			s.pipeline <- message.Warning{Backup: backup}
+		case v1.BackupPhaseFailed:
+			s.pipeline <- message.Error{Backup: backup}
 		}
 	}
-}
-
-func (s *server) Stop() {
-	s.logger.Warn("Received shutdown command")
-	s.done <- true
-	s.logger.Warn("Server shutdown complete")
+	return nil
 }
