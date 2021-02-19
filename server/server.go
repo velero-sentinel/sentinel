@@ -65,6 +65,7 @@ func (s *server) Run() error {
 	for {
 		select {
 		case <-s.done:
+			close(s.downstream)
 			return nil
 		case evt := <-watcher.ResultChan():
 
