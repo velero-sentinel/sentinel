@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/hashicorp/go-hclog"
@@ -36,8 +37,8 @@ type server struct {
 	done       chan bool
 }
 
-func New(logger hclog.Logger) (*server, error) {
-	s := &server{logger: logger, done: make(chan bool)}
+func New(downstream chan<- message.Message, logger hclog.Logger) (*server, error) {
+	s := &server{logger: logger, downstream: downstream, done: make(chan bool)}
 	cfg, err := client.LoadConfig()
 	if err != nil {
 		return nil, err
@@ -47,6 +48,9 @@ func New(logger hclog.Logger) (*server, error) {
 }
 
 func (s *server) Run() error {
+	if s.downstream == nil {
+		panic(errors.New("downstream is nil"))
+	}
 	s.logger.Info("Setting up client")
 	myclient, err := s.factory.Client()
 
@@ -87,6 +91,7 @@ func (s *server) Run() error {
 				s.logger.Info("New backup detected", "name", backup.Name, "state", evt.Type)
 			case v1.BackupPhaseCompleted:
 				s.logger.Info("Backup completed", "name", backup.Name, "state", evt.Type)
+				s.downstream <- message.WarningMessage{Backup: backup}
 			case v1.BackupPhaseDeleting:
 				s.logger.Info("Backup deletion", "name", backup.Name, "state", evt.Type)
 			case v1.BackupPhaseInProgress:

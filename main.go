@@ -65,7 +65,7 @@ var (
 		Namespace      string `kong:"required,short='n',default='velero'"`
 		Debug          debug  `kong:"help='Enable debug logging',group='Logging'"`
 		Bind           string `kong:"required,default=':8080',group='Network',help='address to bind to'"`
-		NotifierConfig string `kong:"type:'existingfile',default='./sentinel.yml'"`
+		NotifierConfig string `kong:"type:'existingfile'"`
 	}
 )
 
@@ -78,37 +78,40 @@ func main() {
 
 	appLogger.Info("Starting up")
 
-	appLogger.Debug("Reading notfier config", "file", config.NotifierConfig)
-	f, _ := os.Open(config.NotifierConfig)
-	dec := yaml.NewDecoder(f)
+	if config.NotifierConfig != "" {
+		appLogger.Debug("Reading notfier config", "file", config.NotifierConfig)
+		f, _ := os.Open(config.NotifierConfig)
+		dec := yaml.NewDecoder(f)
 
-	if err := dec.Decode(&notifiers); err != nil {
-		panic(err)
+		if err := dec.Decode(&notifiers); err != nil {
+			panic(err)
+		}
+		if appLogger.IsDebug() {
+			appLogger.Debug("Read notifier configuration", "file", config.NotifierConfig)
+			spew.Dump(notifiers)
+		}
 	}
-
-	if appLogger.IsDebug() {
-		appLogger.Debug("Read notifier configuration", "file", config.NotifierConfig)
-		spew.Dump(notifiers)
-	}
-
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-	done := make(chan bool, 1)
 
 	p, _ := notification.Configure(&notifiers, appLogger.Named("notification"))
 	go p.Run()
 
-	s, _ := server.New(appLogger.Named("server"))
-	go s.Run()
+	ch := p.Channel()
+	if ch == nil {
+		panic("Pipeline channel is nil")
+	}
 
-	go func() {
-		sig := <-sigs
-		appLogger.Info("Received signal", "signal", sig.String())
-		s.Stop()
-		done <- true
-	}()
+	appLogger.Info("Started pipeline")
 
-	<-done
+	s, _ := server.New(p.Channel(), appLogger.Named("server"))
+	s.Run()
+	appLogger.Info("Started server")
+
+	sig := <-sigs
+	appLogger.Info("Received signal", "signal", sig.String())
+	s.Stop()
+	p.Stop()
+
 	appLogger.Info("Saying goodbye!")
 }

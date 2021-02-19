@@ -15,6 +15,6 @@ spec:
       - name: velero-sentinel
         image: velerosentinel/sentinel
         args:
-          - "server"
+          - "--debug"
         ports:
         - containerPort: 3000

@@ -5,48 +5,37 @@ import (
 	"github.com/velero-sentinel/sentinel/message"
 )
 
-// NewLogNotifier returns the default Log notifier.
+// New returns the default Log notifier.
 func New(logger hclog.Logger) *hclogNotifier {
 
 	ln := &hclogNotifier{
-		logger:   logger,
-		warnings: make(chan message.WarningMessage),
-		errors:   make(chan message.ErrorMessage),
+		logger: logger,
 	}
-	go ln.Run()
 	return ln
 }
 
 type hclogNotifier struct {
-	logger   hclog.Logger
-	warnings chan message.WarningMessage
-	errors   chan message.ErrorMessage
-	done     chan bool
+	logger hclog.Logger
 }
 
-func (n *hclogNotifier) WarningC() chan<- message.WarningMessage {
-	return n.warnings
-}
+func (n *hclogNotifier) Run() chan<- message.Message {
+	n.logger.Debug("Run called")
+	c := make(chan message.Message)
 
-func (n *hclogNotifier) ErrorC() chan<- message.ErrorMessage {
-	return n.errors
-}
+	go func() {
+		n.logger.Debug("Entering goroutine")
+		for m := range c {
+			n.logger.Debug("Received message from upstream")
+			switch m.(type) {
+			case message.WarningMessage:
+				n.logger.Warn(m.Message(), "backup", m.GetBackup().Name)
 
-func (n *hclogNotifier) Run() {
-	for {
-		select {
-		case <-n.done:
-			return
-		case warning := <-n.warnings:
-			n.logger.Warn("Problem with backup detected", "state", warning.GetBackup().Status.Phase, "message", warning.Message())
-		case err := <-n.errors:
-			n.logger.Error("Backup error", "state", err.GetBackup().Status.Phase, "message", err.Message())
+			case message.ErrorMessage:
+				n.logger.Error(m.Message(), "backup", m.GetBackup().Name)
+			}
 		}
-	}
-}
+		n.logger.Debug("Leaving goroutine")
+	}()
 
-func (n *hclogNotifier) Stop() {
-	n.logger.Warn("Received shutdown command")
-	n.done <- true
-	n.logger.Info("Shutdown complete")
+	return c
 }

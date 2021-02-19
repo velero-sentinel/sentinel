@@ -76,10 +76,6 @@ func New(cfg *Config, logger hclog.Logger) (*webhookNotifier, error) {
 
 		warnTmpl: defaultWarnTemplate,
 		errTmpl:  defaultErrTemplate,
-
-		warnings: make(chan message.WarningMessage),
-		errors:   make(chan message.ErrorMessage),
-		done:     make(chan bool),
 	}, nil
 }
 
@@ -93,66 +89,53 @@ type webhookNotifier struct {
 
 	warnTmpl *template.Template
 	errTmpl  *template.Template
-
-	warnings chan message.WarningMessage
-	errors   chan message.ErrorMessage
-	done     chan bool
 }
 
-func (n *webhookNotifier) WarningC() chan<- message.WarningMessage {
-	return n.warnings
-}
+func (n *webhookNotifier) Run() chan<- message.Message {
+	c := make(chan message.Message)
+	go func() {
+		n.logger.Info("Starting up")
+		buf := bytes.NewBuffer(nil)
+		for m := range c {
+			buf.Reset()
+			switch m.(type) {
+			case *message.WarningMessage, message.WarningMessage:
+				n.warnTmpl.Execute(buf, m.GetBackup())
+			case *message.ErrorMessage, message.ErrorMessage:
+				n.errTmpl.Execute(buf, m.GetBackup())
+			}
 
-func (n *webhookNotifier) ErrorC() chan<- message.ErrorMessage {
-	return n.errors
-}
+			br := bytes.NewReader(buf.Bytes())
+			rc := ioutil.NopCloser(br)
 
-func (n *webhookNotifier) Run() {
-	buf := bytes.NewBuffer(nil)
-	for {
-		buf.Reset()
-		select {
-		case <-n.done:
-			return
-		case m := <-n.warnings:
-			n.warnTmpl.Execute(buf, m.Backup)
-		case m := <-n.errors:
-			n.errTmpl.Execute(buf, m.Backup)
-		}
-		br := bytes.NewReader(buf.Bytes())
-		rc := ioutil.NopCloser(br)
+			err := retry.Do(
+				func() error {
+					req, err := http.NewRequest(n.method, n.url.String(), rc)
+					if err != nil {
+						return retry.Unrecoverable(err)
+					}
+					resp, err := n.client.Do(req)
 
-		err := retry.Do(
-			func() error {
-				req, err := http.NewRequest(n.method, n.url.String(), rc)
-				if err != nil {
-					return retry.Unrecoverable(err)
-				}
-				resp, err := n.client.Do(req)
-
-				if resp == nil || resp.StatusCode > 399 {
-					br.Seek(0, io.SeekStart)
-					return errors.New("Request unsuccessful")
-				}
-				return err
-			},
-			retry.OnRetry(
-				func(num uint, err error) {
-					n.logger.Warn("Sending webhook temporarily failed", "name", n.name, "url", n.url.String(), "error", err, "attempt", num+1)
+					if resp == nil || resp.StatusCode > 399 {
+						br.Seek(0, io.SeekStart)
+						return errors.New("Request unsuccessful")
+					}
+					return err
 				},
-			),
+				retry.OnRetry(
+					func(num uint, err error) {
+						n.logger.Warn("Sending webhook temporarily failed", "name", n.name, "url", n.url.String(), "error", err, "attempt", num+1)
+					},
+				),
 
-			retry.Attempts(3),
-			retry.LastErrorOnly(true),
-		)
-		if err != nil {
-			n.logger.Error("Sending webhook failed", "name", n.name, "url", n.url.String(), "error", err, "attempts", 3)
+				retry.Attempts(3),
+				retry.LastErrorOnly(true),
+			)
+			if err != nil {
+				n.logger.Error("Sending webhook failed", "name", n.name, "url", n.url.String(), "error", err, "attempts", 3)
+			}
 		}
-	}
-}
-
-func (n *webhookNotifier) Stop() {
-	n.logger.Info("Received shutdown command")
-	n.done <- true
-	n.logger.Info("Shutdown complete")
+		n.logger.Info("Shut down")
+	}()
+	return c
 }

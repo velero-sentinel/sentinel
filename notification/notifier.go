@@ -20,8 +20,5 @@ import "github.com/velero-sentinel/sentinel/message"
 
 // Notifier describes the behavior of notifiers.
 type Notifier interface {
-	WarningC() chan<- message.WarningMessage
-	ErrorC() chan<- message.ErrorMessage
-	Run()
-	Stop()
+	Run() chan<- message.Message
 }

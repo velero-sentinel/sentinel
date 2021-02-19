@@ -26,4 +26,3 @@ LABEL org.opencontainers.image.revision=${GIT_REVISION}
 LABEL org.opencontainers.image.source=${REPO_URL}
 COPY --from=build /go/src/app/sentinel /usr/local/bin/sentinel
 ENTRYPOINT [ "/usr/local/bin/sentinel" ]
-CMD [ "server" ]
