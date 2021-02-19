@@ -86,5 +86,8 @@ loop:
 	}
 	assert.NotNil(t, m1)
 	assert.NotNil(t, m2)
-
+	for _, c := range []chan message.Message{c1, c2} {
+		_, open := <-c
+		assert.False(t, open)
+	}
 }
