@@ -9,6 +9,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/hashicorp/go-hclog v0.15.0
+	github.com/magefile/mage v1.11.0
 	github.com/mwmahlberg/hclog-mock v0.0.1
 	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/stretchr/testify v1.7.0
