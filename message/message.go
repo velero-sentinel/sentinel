@@ -17,14 +17,11 @@ limitations under the License.
 package message
 
 import (
-	"fmt"
-
 	v1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 )
 
 // Message is the message sent via a Notifier.
 type Message interface {
-	Message() string
 	GetBackup() *v1.Backup
 }
 
@@ -33,22 +30,21 @@ type Error struct {
 	Backup *v1.Backup
 }
 
-func (e Error) Message() string {
-	return fmt.Sprintf("%s is in state %s", e.Backup.Name, e.Backup.Status.Phase)
-}
-
+// GetBackup returns the Velero backup that caused the error message.
+//
+// Satisfies the Message interface.
 func (e Error) GetBackup() *v1.Backup {
 	return e.Backup
 }
 
+// Warning is sent to a notifier in case a backup is partially failed.
 type Warning struct {
 	Backup *v1.Backup
 }
 
-func (w Warning) Message() string {
-	return fmt.Sprintf("%s is in state %s", w.Backup.Name, w.Backup.Status.Phase)
-}
-
+// GetBackup returns the Velero backup that caused the error message.
+//
+// Satisfies the Message interface.
 func (w Warning) GetBackup() *v1.Backup {
 	return w.Backup
 }
