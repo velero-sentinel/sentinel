@@ -28,10 +28,10 @@ func (n *hclogNotifier) Run() chan<- message.Message {
 			n.logger.Debug("Received message from upstream")
 			switch m.(type) {
 			case message.Warning, *message.Warning:
-				n.logger.Warn(m.Message(), "backup", m.GetBackup().Name)
+				n.logger.Warn("Backup partially failed", "backup", m.GetBackup().Name)
 
 			case message.Error, *message.Error:
-				n.logger.Error(m.Message(), "backup", m.GetBackup().Name)
+				n.logger.Error("Backup failed", "backup", m.GetBackup().Name)
 			}
 		}
 		n.logger.Debug("Leaving goroutine")
