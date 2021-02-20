@@ -14,10 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cmd
+package notification
+
+import "github.com/velero-sentinel/sentinel/message"
 
 // Notifier describes the behavior of notifiers.
 type Notifier interface {
-	Warn(Message)
-	Error(Message)
+	Run() chan<- message.Message
 }

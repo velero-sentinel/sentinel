@@ -14,21 +14,41 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cmd
+package message
+
+import (
+	"fmt"
+
+	v1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+)
 
 // Message is the message sent via a Notifier.
 type Message interface {
 	Message() string
+	GetBackup() *v1.Backup
 }
 
-type ErrorMessage string
-
-func (e ErrorMessage) Message() string {
-	return string(e)
+// Error is sent to a notifier in case a backup has failed.
+type Error struct {
+	Backup *v1.Backup
 }
 
-type WarningMessage string
+func (e Error) Message() string {
+	return fmt.Sprintf("%s is in state %s", e.Backup.Name, e.Backup.Status.Phase)
+}
 
-func (w WarningMessage) Message() string {
-	return string(w)
+func (e Error) GetBackup() *v1.Backup {
+	return e.Backup
+}
+
+type Warning struct {
+	Backup *v1.Backup
+}
+
+func (w Warning) Message() string {
+	return fmt.Sprintf("%s is in state %s", w.Backup.Name, w.Backup.Status.Phase)
+}
+
+func (w Warning) GetBackup() *v1.Backup {
+	return w.Backup
 }
