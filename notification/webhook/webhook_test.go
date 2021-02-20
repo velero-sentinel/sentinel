@@ -1,7 +1,9 @@
 package webhook
 
 import (
+	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/velero-sentinel/sentinel/message"
 	v1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestInvalidUrl(t *testing.T) {
@@ -20,6 +23,110 @@ func TestInvalidUrl(t *testing.T) {
 	assert.Nil(t, n)
 	assert.Error(t, err)
 
+}
+
+const illegalTemplate = `{{.Name`
+
+const warnString = `
+{
+	"type": "warning",
+	"name": "{{.Name}}",
+	"phase": "{{.Status.Phase}}"
+}
+`
+
+const errString = `
+{
+	"type": "error",
+	"name": "{{.Name}}",
+	"phase": "{{.Status.Phase}}"
+}
+`
+
+func TestTemplates(t *testing.T) {
+	testCases := []struct {
+		desc               string
+		warningTemplate    string
+		errorTemplate      string
+		message            message.Message
+		expectedBackupName string
+		failParse          bool
+	}{
+		{
+			desc:            "CustomWarning",
+			warningTemplate: warnString,
+			errorTemplate:   "",
+			message: message.Warning{
+				Backup: &v1.Backup{
+					ObjectMeta: metav1.ObjectMeta{Name: "test"},
+					Status:     v1.BackupStatus{Phase: v1.BackupPhasePartiallyFailed},
+				}},
+			expectedBackupName: "test",
+		},
+		{
+			desc:            "CustomError",
+			errorTemplate:   errString,
+			warningTemplate: "",
+			message: message.Error{Backup: &v1.Backup{
+				ObjectMeta: metav1.ObjectMeta{Name: "error"},
+				Status:     v1.BackupStatus{Phase: v1.BackupPhaseFailed},
+			}},
+			expectedBackupName: "error",
+		},
+		{
+			desc:            "FailParseWarn",
+			warningTemplate: illegalTemplate,
+			failParse:       true,
+		},
+		{
+			desc:          "FailParseError",
+			errorTemplate: illegalTemplate,
+			failParse:     true,
+		},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			processed := make(chan bool)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+				assert.Equal(t, http.MethodPost, r.Method)
+
+				buf, err := ioutil.ReadAll(r.Body)
+				r.Body.Close()
+				assert.NoError(t, err)
+				assert.NotNil(t, buf)
+				rd := bytes.NewReader(buf)
+				dec := json.NewDecoder(rd)
+				v := make(map[string]interface{})
+				err = dec.Decode(&v)
+
+				assert.NoError(t, err, "Error parsing: '%s'", string(buf))
+				assert.NotNil(t, v["name"])
+				assert.EqualValues(t, tC.expectedBackupName, v["name"].(string))
+				processed <- true
+			}))
+			c := Config{
+				Name:            tC.desc,
+				URL:             srv.URL,
+				Method:          http.MethodPost,
+				WarningTemplate: tC.warningTemplate,
+				ErrorTemplate:   tC.errorTemplate,
+			}
+
+			w, err := New(&c, hclog.NewNullLogger())
+			if tC.failParse {
+				assert.Error(t, err)
+				assert.Nil(t, w)
+				return
+			}
+			assert.NoError(t, err)
+			assert.NotNil(t, w)
+
+			d := w.Run()
+			d <- tC.message
+			<-processed
+		})
+	}
 }
 
 func TestRetry(t *testing.T) {

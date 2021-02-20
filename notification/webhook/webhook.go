@@ -55,9 +55,11 @@ var defaultWarnTemplate = template.Must(template.New("warn").Parse(defaultWarnTe
 var defaultErrTemplate = template.Must(template.New("error").Parse(defaultErrTemplateString))
 
 type Config struct {
-	Name   string
-	URL    string
-	Method string
+	Name            string
+	URL             string
+	Method          string
+	WarningTemplate string
+	ErrorTemplate   string
 }
 
 func New(cfg *Config, logger hclog.Logger) (*webhookNotifier, error) {
@@ -65,7 +67,7 @@ func New(cfg *Config, logger hclog.Logger) (*webhookNotifier, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parsing URL: %s", err)
 	}
-	return &webhookNotifier{
+	n := &webhookNotifier{
 		name:   cfg.Name,
 		client: *http.DefaultClient,
 		url:    u,
@@ -75,7 +77,21 @@ func New(cfg *Config, logger hclog.Logger) (*webhookNotifier, error) {
 
 		warnTmpl: defaultWarnTemplate,
 		errTmpl:  defaultErrTemplate,
-	}, nil
+	}
+	if cfg.WarningTemplate != "" {
+		n.warnTmpl, err = template.New("warn").Parse(cfg.WarningTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("parsing warningTemplate: %s", err)
+		}
+	}
+	if cfg.ErrorTemplate != "" {
+		n.errTmpl, err = template.New("error").Parse(cfg.ErrorTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("parsing errorTemplate: %s", err)
+		}
+	}
+
+	return n, nil
 }
 
 type webhookNotifier struct {
