@@ -58,8 +58,8 @@ type Config struct {
 	Name            string
 	URL             string
 	Method          string
-	WarningTemplate string
-	ErrorTemplate   string
+	WarningTemplate string `yaml:"warningTemplate"`
+	ErrorTemplate   string `yaml:"errorTemplate"`
 }
 
 func New(cfg *Config, logger hclog.Logger) (*webhookNotifier, error) {
