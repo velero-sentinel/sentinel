@@ -4,16 +4,24 @@ go 1.15
 
 require (
 	cloud.google.com/go v0.46.3 // indirect
+	github.com/Masterminds/goutils v1.1.1 // indirect
+	github.com/Masterminds/semver v1.5.0 // indirect
+	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/alecthomas/kong v0.2.15
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/davecgh/go-spew v1.1.1
 	github.com/fatih/color v1.10.0 // indirect
+	github.com/google/uuid v1.2.0 // indirect
 	github.com/hashicorp/go-hclog v0.15.0
+	github.com/huandu/xstrings v1.3.2 // indirect
+	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/magefile/mage v1.11.0
+	github.com/mitchellh/copystructure v1.1.1 // indirect
 	github.com/mwmahlberg/hclog-mock v0.0.1
 	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/stretchr/testify v1.7.0
 	github.com/vmware-tanzu/velero v1.5.3
+	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83 // indirect
 	golang.org/x/sys v0.0.0-20210219172841-57ea560cfca1 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
