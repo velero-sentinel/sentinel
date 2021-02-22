@@ -46,9 +46,12 @@ func (d debug) BeforeApply() error {
 	return nil
 }
 
-type cfgPath string
+// CfgPath denotes the path to the YAML configuration file for notifiers.
+type CfgPath string
 
-func (p cfgPath) AfterApply() error {
+// AfterApply is a kong callback. After kong verified that the path indeed an existing file,
+// the YAML configuration is parsed into the notifier config.
+func (p CfgPath) AfterApply() error {
 	if p == "" {
 		return nil
 	}
@@ -69,7 +72,7 @@ var (
 		Namespace      string  `kong:"required,short='n',default='velero'"`
 		Debug          debug   `kong:"help='Enable debug logging',group='Logging'"`
 		Bind           string  `kong:"required,default=':8080',group='Network',help='address to bind to'"`
-		NotifierConfig cfgPath `kong:"type:'existingfile'"`
+		NotifierConfig CfgPath `kong:"type:'existingfile'"`
 	}
 )
 

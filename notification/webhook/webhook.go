@@ -25,34 +25,25 @@ import (
 	"net/url"
 	"text/template"
 
+	"github.com/Masterminds/sprig"
 	"github.com/avast/retry-go"
 	"github.com/hashicorp/go-hclog"
 	"github.com/velero-sentinel/sentinel/message"
 )
 
 const (
-	defaultWarnTemplateString = `
+	defaultTemplateString = `
 {
-    "type": "warning",
+    "type": "{{.Type}}",
     "backup":{
         "name": "{{.Name}}",
         "state": "{{.Status.Phase}}"
     }
 }
 `
-
-	defaultErrTemplateString = `
-{
-    "type":"error",
-    "backup":{
-        "name": "{{.Name}}",
-        "state": "{{.Status.Phase}}"
-    }
-}`
 )
 
-var defaultWarnTemplate = template.Must(template.New("warn").Parse(defaultWarnTemplateString))
-var defaultErrTemplate = template.Must(template.New("error").Parse(defaultErrTemplateString))
+var defaultTemplate = template.Must(template.New("webhook").Funcs(sprig.TxtFuncMap()).Parse(defaultTemplateString))
 
 var predefined = map[string]*template.Template{"slack": slackTemplate}
 
@@ -69,22 +60,19 @@ func New(cfg *Config, logger hclog.Logger) (*webhookNotifier, error) {
 
 		logger: logger,
 
-		warnTmpl: defaultWarnTemplate,
-		errTmpl:  defaultErrTemplate,
+		tmpl: defaultTemplate,
 	}
-	if cfg.WarningTemplate != "" {
-		n.warnTmpl, err = template.New("warn").Parse(cfg.WarningTemplate)
-		if err != nil {
-			return nil, fmt.Errorf("parsing warningTemplate: %s", err)
-		}
-	}
-	if cfg.ErrorTemplate != "" {
-		n.errTmpl, err = template.New("error").Parse(cfg.ErrorTemplate)
+
+	if cfg.Template != "" {
+		n.tmpl, err = template.New("notification").Funcs(sprig.TxtFuncMap()).Parse(cfg.Template)
 		if err != nil {
 			return nil, fmt.Errorf("parsing errorTemplate: %s", err)
 		}
 	}
 
+	for k, t := range predefined {
+		n.tmpl.AddParseTree(k, t.Tree)
+	}
 	return n, nil
 }
 
@@ -96,8 +84,7 @@ type webhookNotifier struct {
 
 	logger hclog.Logger
 
-	warnTmpl *template.Template
-	errTmpl  *template.Template
+	tmpl *template.Template
 }
 
 func (n *webhookNotifier) Run() chan<- message.Message {
@@ -107,11 +94,20 @@ func (n *webhookNotifier) Run() chan<- message.Message {
 		buf := bytes.NewBuffer(nil)
 		for m := range c {
 			buf.Reset()
+
+			tmplVars := map[string]interface{}{
+				"Backup": m.GetBackup(),
+			}
+
 			switch m.(type) {
 			case *message.Warning, message.Warning:
-				n.warnTmpl.Execute(buf, m.GetBackup())
+				tmplVars["Type"] = "warning"
 			case *message.Error, message.Error:
-				n.errTmpl.Execute(buf, m.GetBackup())
+				tmplVars["Type"] = "error"
+			}
+
+			if err := n.tmpl.Execute(buf, tmplVars); err != nil {
+				panic(err)
 			}
 
 			if err := retry.Do(

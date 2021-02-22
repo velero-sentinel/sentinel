@@ -30,32 +30,30 @@ const illegalTemplate = `{{.Name`
 const warnString = `
 {
 	"type": "warning",
-	"name": "{{.Name}}",
-	"phase": "{{.Status.Phase}}"
+	"name": "{{.Backup.Name}}",
+	"phase": "{{.Backup.Status.Phase}}"
 }
 `
 
 const errString = `
 {
 	"type": "error",
-	"name": "{{.Name}}",
-	"phase": "{{.Status.Phase}}"
+	"name": "{{.Backup.Name}}",
+	"phase": "{{.Backup.Status.Phase}}"
 }
 `
 
 func TestTemplates(t *testing.T) {
 	testCases := []struct {
 		desc               string
-		warningTemplate    string
-		errorTemplate      string
+		template           string
 		message            message.Message
 		expectedBackupName string
 		failParse          bool
 	}{
 		{
-			desc:            "CustomWarning",
-			warningTemplate: warnString,
-			errorTemplate:   "",
+			desc:     "CustomWarning",
+			template: warnString,
 			message: message.Warning{
 				Backup: &v1.Backup{
 					ObjectMeta: metav1.ObjectMeta{Name: "test"},
@@ -64,9 +62,8 @@ func TestTemplates(t *testing.T) {
 			expectedBackupName: "test",
 		},
 		{
-			desc:            "CustomError",
-			errorTemplate:   errString,
-			warningTemplate: "",
+			desc:     "CustomError",
+			template: errString,
 			message: message.Error{Backup: &v1.Backup{
 				ObjectMeta: metav1.ObjectMeta{Name: "error"},
 				Status:     v1.BackupStatus{Phase: v1.BackupPhaseFailed},
@@ -74,14 +71,14 @@ func TestTemplates(t *testing.T) {
 			expectedBackupName: "error",
 		},
 		{
-			desc:            "FailParseWarn",
-			warningTemplate: illegalTemplate,
-			failParse:       true,
+			desc:      "FailParseWarn",
+			template:  illegalTemplate,
+			failParse: true,
 		},
 		{
-			desc:          "FailParseError",
-			errorTemplate: illegalTemplate,
-			failParse:     true,
+			desc:      "FailParseError",
+			template:  illegalTemplate,
+			failParse: true,
 		},
 	}
 	for _, tC := range testCases {
@@ -106,11 +103,10 @@ func TestTemplates(t *testing.T) {
 				processed <- true
 			}))
 			c := Config{
-				Name:            tC.desc,
-				URL:             srv.URL,
-				Method:          http.MethodPost,
-				WarningTemplate: tC.warningTemplate,
-				ErrorTemplate:   tC.errorTemplate,
+				Name:     tC.desc,
+				URL:      srv.URL,
+				Method:   http.MethodPost,
+				Template: tC.template,
 			}
 
 			w, err := New(&c, hclog.NewNullLogger())
@@ -201,13 +197,13 @@ func TestWebhooks(t *testing.T) {
 		{
 			desc:  "Warning Webhook",
 			kind:  "warning",
-			tmpl:  defaultWarnTemplate,
+			tmpl:  defaultTemplate,
 			phase: v1.BackupPhasePartiallyFailed,
 		},
 		{
 			desc:  "Error Webhook",
 			kind:  "error",
-			tmpl:  defaultErrTemplate,
+			tmpl:  defaultTemplate,
 			phase: v1.BackupPhaseFailed,
 		},
 	}

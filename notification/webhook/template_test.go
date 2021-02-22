@@ -6,9 +6,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"testing"
+	"text/template"
 
+	"github.com/Masterminds/sprig"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
@@ -25,14 +28,30 @@ webhooks:
   - name: "test"
     url: "http://www.example.com"
     method: "GET"
-    warningTemplate: &tmpl |
+    template: &tmpl |
       {
-        "action": "test",
-        "name": "{{ .Name }}",
-        "message": "{{ .Name}} is in {{ .Status.Phase }}"
+        "action": "{{.Type}}",
+        "name": "{{ .Backup.Name }}",
+        "message": "{{ .Backup.Name}} is in {{ .Backup.Status.Phase }}"
       }
-    errorTemplate: *tmpl
 `
+
+const useSlack = `
+webhooks:
+  - name: "test"
+    url: "http://www.example.com"
+    method: "POST"
+    template: &tmpl |
+      {{ template "slack" . }}
+`
+
+type expectedSlack struct {
+	Text        string
+	Attachments []struct {
+		Color string
+		Text  string
+	}
+}
 
 type expectedJson struct {
 	Action  string
@@ -54,6 +73,20 @@ var warnMessage = message.Warning{Backup: &partiallyFailedBackup}
 
 var errorMessage = message.Error{Backup: &failedBackup}
 
+func TestSlackTemplate(t *testing.T) {
+	notifiers := notification.NotifierConfig{}
+	assert.NoError(t, yaml.Unmarshal([]byte(useSlack), &notifiers))
+
+	tmplVars := map[string]interface{}{
+		"Type":   "warning",
+		"Backup": partiallyFailedBackup,
+	}
+	tmpl := template.New("notification").Funcs(sprig.TxtFuncMap())
+	tmpl.AddParseTree("slack", template.Must(tmpl.New("slack").Parse(webhook.SlackString)).Tree)
+	tmpl.Parse(notifiers.Webhooks[0].Template)
+	assert.NoError(t, tmpl.Execute(os.Stdout, tmplVars))
+}
+
 func TestTemplateProcessingEndToEnd(t *testing.T) {
 	testCases := []struct {
 		desc    string
@@ -62,24 +95,39 @@ func TestTemplateProcessingEndToEnd(t *testing.T) {
 		payload interface{}
 	}{
 		{
-			desc: "AnchorWarning",
+			desc: "DefaultWarning",
 			yaml: testYaml,
 			// backup: partiallyFailedBackup,
 			message: message.Warning{Backup: &partiallyFailedBackup},
 			payload: expectedJson{
-				Action:  "test",
+				Action:  "warning",
 				Name:    partiallyFailedBackup.Name,
 				Message: fmt.Sprintf("%s is in %s", partiallyFailedBackup.Name, partiallyFailedBackup.Status.Phase),
 			},
 		},
 		{
-			desc:    "AnchoredError",
+			desc:    "DefaultError",
 			yaml:    testYaml,
 			message: message.Error{Backup: &failedBackup},
 			payload: expectedJson{
-				Action:  "test",
+				Action:  "error",
 				Name:    failedBackup.Name,
 				Message: fmt.Sprintf("%s is in %s", failedBackup.Name, failedBackup.Status.Phase),
+			},
+		},
+		{
+			desc:    "SlackWarning",
+			yaml:    useSlack,
+			message: message.Warning{Backup: &partiallyFailedBackup},
+			payload: expectedSlack{
+				Text: "<!channel> Velero *WARNING*",
+				Attachments: []struct {
+					Color string
+					Text  string
+				}{{
+					Color: webhook.WarningColor,
+					Text:  fmt.Sprintf("Backup '%s' is in state '%s'", partiallyFailedBackup.Name, partiallyFailedBackup.Status.Phase),
+				}},
 			},
 		},
 	}
@@ -90,8 +138,7 @@ func TestTemplateProcessingEndToEnd(t *testing.T) {
 			assert.EqualValues(t, 1, len(notifiers.Webhooks))
 
 			hook := notifiers.Webhooks[0]
-			assert.NotEmpty(t, hook.WarningTemplate, "config: %s", spew.Sdump(notifiers))
-			assert.NotEmpty(t, hook.ErrorTemplate, "config: %s", spew.Sdump(notifiers))
+			assert.NotEmpty(t, hook.Template, "config: %s", spew.Sdump(notifiers))
 
 			done := make(chan bool)
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

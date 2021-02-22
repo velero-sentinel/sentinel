@@ -15,7 +15,7 @@ func TestDebug(t *testing.T) {
 func TestNotifierConfig(t *testing.T) {
 	testCases := []struct {
 		desc          string
-		path          cfgPath
+		path          CfgPath
 		expectedError bool
 	}{
 		{
