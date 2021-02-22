@@ -45,7 +45,17 @@ const (
 
 var defaultTemplate = template.Must(template.New("webhook").Funcs(sprig.TxtFuncMap()).Parse(defaultTemplateString))
 
-var predefined = map[string]*template.Template{"slack": slackTemplate}
+var predefined = make(map[string]*template.Template)
+
+func init() {
+	for k, v := range map[string]string{"slack": SlackString} {
+		t, err := template.New(k).Funcs(sprig.TxtFuncMap()).Parse(v)
+		if err != nil {
+			panic(fmt.Errorf("Error parsing '%s' as template '%s': %s", v, k, err))
+		}
+		predefined[k] = t
+	}
+}
 
 func New(cfg *Config, logger hclog.Logger) (*webhookNotifier, error) {
 	u, err := url.Parse(cfg.URL)

@@ -130,6 +130,21 @@ func TestTemplateProcessingEndToEnd(t *testing.T) {
 				}},
 			},
 		},
+		{
+			desc:    "SlackWarning",
+			yaml:    useSlack,
+			message: message.Error{Backup: &failedBackup},
+			payload: expectedSlack{
+				Text: "<!channel> Velero *ERROR*",
+				Attachments: []struct {
+					Color string
+					Text  string
+				}{{
+					Color: webhook.ErrorColor,
+					Text:  fmt.Sprintf("Backup '%s' is in state '%s'", failedBackup.Name, failedBackup.Status.Phase),
+				}},
+			},
+		},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {

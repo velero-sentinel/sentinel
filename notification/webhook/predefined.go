@@ -1,14 +1,14 @@
 package webhook
 
-import (
-	"text/template"
+const (
+	// WarningColor is the color used for warning messages in Slack.
+	WarningColor = "#ebab34"
 
-	"github.com/Masterminds/sprig"
-)
+	// ErrorColor is the color used for warning messages in Slack.
+	ErrorColor = "#eb4634"
 
-const WarningColor = "#ebab34"
-const ErrorColor = "#eb4634"
-const SlackString = `
+	// SlackString is the default Slack template.
+	SlackString = `
 {{ define "slack" }}
 {
 	"text": "<!channel> Velero *{{- .Type | upper -}}*",
@@ -21,5 +21,4 @@ const SlackString = `
 }
 {{ end }}
 `
-
-var slackTemplate = template.Must(template.New("slack").Funcs(sprig.TxtFuncMap()).Parse(SlackString))
+)
