@@ -54,13 +54,7 @@ const (
 var defaultWarnTemplate = template.Must(template.New("warn").Parse(defaultWarnTemplateString))
 var defaultErrTemplate = template.Must(template.New("error").Parse(defaultErrTemplateString))
 
-type Config struct {
-	Name            string
-	URL             string
-	Method          string
-	WarningTemplate string `yaml:"warningTemplate"`
-	ErrorTemplate   string `yaml:"errorTemplate"`
-}
+var predefined = map[string]*template.Template{"slack": slackTemplate}
 
 func New(cfg *Config, logger hclog.Logger) (*webhookNotifier, error) {
 	u, err := url.Parse(cfg.URL)
