@@ -27,7 +27,7 @@ import (
 
 	"github.com/Masterminds/sprig"
 	"github.com/avast/retry-go"
-	"github.com/hashicorp/go-hclog"
+	"github.com/sirupsen/logrus"
 	"github.com/velero-sentinel/sentinel/message"
 )
 
@@ -57,7 +57,7 @@ func init() {
 	}
 }
 
-func New(cfg *Config, logger hclog.Logger) (*webhookNotifier, error) {
+func New(cfg *Config, logger *logrus.Logger) (*webhookNotifier, error) {
 	u, err := url.Parse(cfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("parsing URL: %s", err)
@@ -92,7 +92,7 @@ type webhookNotifier struct {
 	url    *url.URL
 	method string
 
-	logger hclog.Logger
+	logger *logrus.Logger
 
 	tmpl *template.Template
 }
@@ -126,7 +126,9 @@ func (n *webhookNotifier) Run() chan<- message.Message {
 				},
 				retry.OnRetry(
 					func(num uint, err error) {
-						n.logger.Warn("Sending webhook temporarily failed", "name", n.name, "url", n.url.String(), "error", err, "attempt", num+1)
+						n.logger.
+							WithFields(logrus.Fields{"name": n.name, "url": n.url.String(), "error": err, "attempt": num + 1}).
+							Warn("Sending webhook temporarily failed")
 					},
 				),
 				retry.Attempts(3),

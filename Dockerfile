@@ -7,7 +7,7 @@ ARG VERSION
 WORKDIR /go/src/app
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags \ 
-  "-X 'cmd.GitCommit=${GIT_REVISION}' -X 'cmd.Version=${VERSION}' -X 'cmd.BuildTime=${BUILD_DATE}'" \
+  "-X 'main.GitCommit=${GIT_REVISION}' -X 'main.Version=${VERSION}' -X 'cmd.BuildDate=${BUILD_DATE}'" \
   -a -o sentinel .
 
 FROM alpine:3.13

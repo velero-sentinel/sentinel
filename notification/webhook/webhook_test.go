@@ -10,7 +10,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/hashicorp/go-hclog"
+	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/velero-sentinel/sentinel/message"
 	v1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
@@ -18,7 +18,10 @@ import (
 )
 
 func TestInvalidUrl(t *testing.T) {
-	n, err := New(&Config{Name: "invalidURL", URL: "http://ä<<>>@!/foo"}, hclog.NewNullLogger())
+
+	log, _ := test.NewNullLogger()
+
+	n, err := New(&Config{Name: "invalidURL", URL: "http://ä<<>>@!/foo"}, log)
 
 	assert.Nil(t, n)
 	assert.Error(t, err)
@@ -108,8 +111,8 @@ func TestTemplates(t *testing.T) {
 				Method:   http.MethodPost,
 				Template: tC.template,
 			}
-
-			w, err := New(&c, hclog.NewNullLogger())
+			log, _ := test.NewNullLogger()
+			w, err := New(&c, log)
 			if tC.failParse {
 				assert.Error(t, err)
 				assert.Nil(t, w)
@@ -168,7 +171,8 @@ func TestRetry(t *testing.T) {
 			defer srv.Close()
 
 			cfg := &Config{Name: tC.desc, URL: srv.URL, Method: http.MethodPost}
-			n, _ := New(cfg, hclog.NewNullLogger())
+			log, _ := test.NewNullLogger()
+			n, _ := New(cfg, log)
 			c := n.Run()
 			msg := new(message.Warning)
 			msg.Backup = new(v1.Backup)
@@ -221,7 +225,8 @@ func TestWebhooks(t *testing.T) {
 			defer srv.Close()
 
 			cfg := &Config{Name: tC.desc, URL: srv.URL, Method: http.MethodGet}
-			n, _ := New(cfg, hclog.NewNullLogger())
+			log, _ := test.NewNullLogger()
+			n, _ := New(cfg, log)
 
 			c := n.Run()
 

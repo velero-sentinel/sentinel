@@ -24,7 +24,7 @@ import (
 	"syscall"
 
 	"github.com/alecthomas/kong"
-	"github.com/hashicorp/go-hclog"
+	"github.com/sirupsen/logrus"
 	"github.com/velero-sentinel/sentinel/notification"
 	"github.com/velero-sentinel/sentinel/pipeline"
 	"github.com/vmware-tanzu/velero/pkg/client"
@@ -39,10 +39,24 @@ const (
 	veleroNamespace = "velero"
 )
 
+// Build time variables
+var (
+	Version   string
+	GitCommit string
+	BuildDate string
+)
+
+type jsonlog bool
+
+func (j jsonlog) BeforeApply() error {
+	appLogger.SetFormatter(&logrus.JSONFormatter{})
+	return nil
+}
+
 type debug bool
 
 func (d debug) BeforeApply() error {
-	appLogger.SetLevel(hclog.Debug)
+	appLogger.SetLevel(logrus.DebugLevel)
 	return nil
 }
 
@@ -65,38 +79,60 @@ func (p CfgPath) AfterApply() error {
 }
 
 var (
-	appLogger hclog.Logger = hclog.New(&hclog.LoggerOptions{Name: "sentinel", Color: hclog.ForceColor})
+	appLogger = &logrus.Logger{
+		Out:   os.Stderr,
+		Level: logrus.InfoLevel,
+		Formatter: &logrus.TextFormatter{
+			DisableSorting:         false,
+			DisableLevelTruncation: true,
+			DisableTimestamp:       false,
+		},
+	}
 
 	notifiers notification.NotifierConfig
 	config    struct {
 		Namespace      string  `kong:"required,short='n',default='velero'"`
 		Debug          debug   `kong:"help='Enable debug logging',group='Logging'"`
+		JSON           jsonlog `kong:"help='output log in JSON',group='Logging'"`
 		Bind           string  `kong:"required,default=':8080',group='Network',help='address to bind to'"`
 		NotifierConfig CfgPath `kong:"type:'existingfile'"`
 	}
 )
 
+var versionInfo = logrus.Fields{
+	"version":    Version,
+	"revision":   GitCommit,
+	"build-date": BuildDate,
+}
+
 func main() {
 
-	ctx := kong.Parse(&config, kong.Bind(appLogger))
+	kong.Parse(&config, kong.Bind(appLogger))
 
-	ctx.Printf("Starting up...\n")
+	appLogger.WithFields(versionInfo).Info("Starting up...")
 
 	sigs := make(chan os.Signal, 1)
+	defer close(sigs)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	p, err := pipeline.New(&notifiers, appLogger.Named("notification"))
-	ctx.FatalIfErrorf(err)
-	ctx.Printf("Configured pipeline\n")
-	watcher, _ := setupClient()
+	p, err := pipeline.New(&notifiers, appLogger)
+	if err != nil {
+		appLogger.WithError(err).Fatal("Setting up pipeline")
+	}
+
+	appLogger.Info("Configured pipeline")
+	watcher, err := setupClient()
+
+	appLogger.WithError(err).Fatal("Client could not be set up")
+
 	evts := watcher.ResultChan()
-	s := server.New(p.Run(), appLogger.Named("server"))
+	s := server.New(p.Run(), appLogger)
 	s.Run(evts)
 
-	ctx.Printf("Started server")
+	appLogger.Info("Started server")
 
 	sig := <-sigs
-	appLogger.Info("Received signal", "signal", sig.String())
+	appLogger.WithField("signal", sig.String()).Info("Received signal")
 	watcher.Stop()
 	appLogger.Info("Saying goodbye!")
 }

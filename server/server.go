@@ -19,7 +19,7 @@ package server
 import (
 	"errors"
 
-	"github.com/hashicorp/go-hclog"
+	"github.com/sirupsen/logrus"
 	v1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	"k8s.io/apimachinery/pkg/watch"
 
@@ -27,11 +27,11 @@ import (
 )
 
 type server struct {
-	logger   hclog.Logger
+	logger   *logrus.Logger
 	pipeline chan<- message.Message
 }
 
-func New(pipeline chan<- message.Message, logger hclog.Logger) *server {
+func New(pipeline chan<- message.Message, logger *logrus.Logger) *server {
 	s := &server{logger: logger, pipeline: pipeline}
 	return s
 }
