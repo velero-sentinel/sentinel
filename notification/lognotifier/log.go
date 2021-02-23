@@ -1,24 +1,24 @@
 package lognotifier
 
 import (
-	"github.com/hashicorp/go-hclog"
+	"github.com/sirupsen/logrus"
 	"github.com/velero-sentinel/sentinel/message"
 )
 
 // New returns the default Log notifier.
-func New(logger hclog.Logger) *hclogNotifier {
+func New(logger *logrus.Logger) *logNotifier {
 
-	ln := &hclogNotifier{
+	ln := &logNotifier{
 		logger: logger,
 	}
 	return ln
 }
 
-type hclogNotifier struct {
-	logger hclog.Logger
+type logNotifier struct {
+	logger *logrus.Logger
 }
 
-func (n *hclogNotifier) Run() chan<- message.Message {
+func (n *logNotifier) Run() chan<- message.Message {
 	n.logger.Debug("Run called")
 	c := make(chan message.Message)
 

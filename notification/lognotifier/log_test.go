@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	mocked "github.com/mwmahlberg/hclog-mock"
-	"github.com/stretchr/testify/mock"
+	"github.com/sirupsen/logrus/hooks/test"
+	"github.com/stretchr/testify/assert"
 	"github.com/velero-sentinel/sentinel/message"
 	v1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,16 +33,15 @@ func TestLogNotifier(t *testing.T) {
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			m := &mocked.Logger{}
-			m.On("Debug", mock.Anything).Maybe().Return(nil)
-			m.On(tC.method, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("string")).Return(nil).Once()
+			log, hook := test.NewNullLogger()
 
-			n := New(m)
+			n := New(log)
 			c := n.Run()
 			c <- tC.msg
 			time.Sleep(200 * time.Millisecond)
+
 			defer close(c)
-			m.AssertExpectations(t)
+			assert.True(t, len(hook.AllEntries()) > 0)
 		})
 	}
 }

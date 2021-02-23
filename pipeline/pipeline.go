@@ -3,7 +3,7 @@ package pipeline
 import (
 	"fmt"
 
-	"github.com/hashicorp/go-hclog"
+	"github.com/sirupsen/logrus"
 	"github.com/velero-sentinel/sentinel/message"
 	"github.com/velero-sentinel/sentinel/notification"
 	"github.com/velero-sentinel/sentinel/notification/lognotifier"
@@ -11,34 +11,34 @@ import (
 )
 
 type pipeline struct {
-	logger     hclog.Logger
+	logger     *logrus.Logger
 	downstream []chan<- message.Message
 }
 
-func New(cfg *notification.NotifierConfig, logger hclog.Logger) (*pipeline, error) {
+func New(cfg *notification.NotifierConfig, logger *logrus.Logger) (*pipeline, error) {
 	p := &pipeline{
 		logger:     logger,
 		downstream: make([]chan<- message.Message, 0),
 	}
 
 	if len(cfg.Webhooks) > 0 {
-		webhooks, err := configureWebhooks(cfg.Webhooks, logger.Named("webhook"))
+		webhooks, err := configureWebhooks(cfg.Webhooks, logger)
 		if err != nil {
 			return nil, fmt.Errorf("configuring webhooks: %s", err)
 		}
 		p.downstream = append(p.downstream, webhooks...)
 	}
-	ln := lognotifier.New(logger.Named("log"))
+	ln := lognotifier.New(logger)
 	p.downstream = append(p.downstream, ln.Run())
 	return p, nil
 }
 
-func configureWebhooks(cfg []webhook.Config, webhookLogger hclog.Logger) ([]chan<- message.Message, error) {
+func configureWebhooks(cfg []webhook.Config, webhookLogger *logrus.Logger) ([]chan<- message.Message, error) {
 
 	hooks := make([]chan<- message.Message, len(cfg))
 
 	for n, c := range cfg {
-		h, err := webhook.New(&c, webhookLogger.With("webhook", c.Name))
+		h, err := webhook.New(&c, webhookLogger)
 		if err != nil {
 			return nil, fmt.Errorf("configuring webhook '%s':%s ", c.Name, err)
 		}

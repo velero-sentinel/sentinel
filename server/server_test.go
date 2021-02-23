@@ -4,10 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/go-hclog"
-	mocked "github.com/mwmahlberg/hclog-mock"
+	"github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/velero-sentinel/sentinel/message"
 
 	v1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
@@ -17,15 +16,15 @@ import (
 )
 
 func TestNoDownstream(t *testing.T) {
-	s := server{logger: hclog.NewNullLogger()}
+	s := server{logger: logrus.New()}
 	err := s.Run(make(chan watch.Event))
 	assert.Error(t, err)
 }
 
 func TestInvalidEventObject(t *testing.T) {
 
-	l := &mocked.Logger{}
-	l.On("Error", mock.Anything).Return(nil)
+	l, hook := test.NewNullLogger()
+
 	p := make(chan message.Message)
 	w := make(chan watch.Event)
 	s := New(p, l)
@@ -39,7 +38,13 @@ func TestInvalidEventObject(t *testing.T) {
 	}
 	close(w)
 	time.Sleep(250 * time.Millisecond)
-	l.AssertNumberOfCalls(t, "Error", 1)
+	errs := 0
+	for _, e := range hook.AllEntries() {
+		if e.Level == logrus.ErrorLevel {
+			errs++
+		}
+	}
+	assert.Equal(t, 1, errs)
 
 }
 func TestDispatch(t *testing.T) {
@@ -100,10 +105,8 @@ func TestDispatch(t *testing.T) {
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			l := &mocked.Logger{}
-			if tC.messageExpected == false {
-				l.On("Info", mock.Anything).Return(nil).Once()
-			}
+			l, _ := test.NewNullLogger()
+
 			w := make(chan watch.Event)
 			p := make(chan message.Message)
 			s := New(p, l)
@@ -123,7 +126,7 @@ func TestDispatch(t *testing.T) {
 			}
 			close(w)
 			assert.True(t, (m != nil) == tC.messageExpected)
-			l.AssertExpectations(t)
+
 		})
 	}
 }

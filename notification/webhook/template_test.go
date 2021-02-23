@@ -13,7 +13,7 @@ import (
 
 	"github.com/Masterminds/sprig"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/hashicorp/go-hclog"
+	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/velero-sentinel/sentinel/message"
 	"github.com/velero-sentinel/sentinel/notification"
@@ -172,7 +172,8 @@ func TestTemplateProcessingEndToEnd(t *testing.T) {
 			defer srv.Close()
 
 			notifiers.Webhooks[0].URL = srv.URL
-			h, err := webhook.New(&notifiers.Webhooks[0], hclog.NewNullLogger())
+			log, _ := test.NewNullLogger()
+			h, err := webhook.New(&notifiers.Webhooks[0], log)
 			assert.NoError(t, err)
 
 			c := h.Run()

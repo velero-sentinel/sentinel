@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/hashicorp/go-hclog"
+	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/velero-sentinel/sentinel/message"
 	"github.com/velero-sentinel/sentinel/notification"
@@ -16,12 +16,13 @@ import (
 )
 
 func TestNewFail(t *testing.T) {
+	log, _ := test.NewNullLogger()
 	p, err := New(&notification.NotifierConfig{
 		Webhooks: []webhook.Config{webhook.Config{
 			Name:   "invalidURL",
 			URL:    "http://ä<<>>@!/foo",
 			Method: http.MethodGet,
-		}}}, hclog.NewNullLogger(),
+		}}}, log,
 	)
 	assert.Nil(t, p)
 	assert.Error(t, err)
@@ -51,8 +52,9 @@ func TestNewDownstreamSetup(t *testing.T) {
 		},
 	}
 	for _, tC := range testCases {
+		log, _ := test.NewNullLogger()
 		t.Run(tC.desc, func(t *testing.T) {
-			p, err := New(tC.cfg, hclog.NewNullLogger())
+			p, err := New(tC.cfg, log)
 			assert.NoError(t, err)
 			assert.NotNil(t, p)
 			assert.NotNil(t, p.downstream)
@@ -63,8 +65,9 @@ func TestNewDownstreamSetup(t *testing.T) {
 func TestRun(t *testing.T) {
 	c1 := make(chan message.Message)
 	c2 := make(chan message.Message)
+	log, _ := test.NewNullLogger()
 	p := pipeline{
-		logger:     hclog.NewNullLogger(),
+		logger:     log,
 		downstream: []chan<- message.Message{c1, c2},
 	}
 
