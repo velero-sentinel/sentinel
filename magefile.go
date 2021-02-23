@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"time"
@@ -37,24 +38,28 @@ func (Sonarcloud) Reports() {
 	mg.Deps(Sonarcloud.Coverage)
 }
 
+func rv() (rev, version string) {
+	var err error
+	if rev, err = sh.Output("git", "rev-parse", "--short", "HEAD"); err != nil {
+		log.Fatalf("obtaining git hash: %s", err)
+	}
+	var tag string
+	if tag, err = sh.Output("git", "rev-list", "--tags", "--max-count=1"); err != nil {
+		log.Fatalf("obtaining tag revision: %s", err)
+	}
+
+	if version, err = sh.Output("git", "describe", "--tags", tag); err != nil {
+		log.Fatalf("obtaining version: %s", err)
+	}
+
+	return
+}
+
 // Create the docker image
 func (Docker) Build(ctx context.Context) error {
 
 	mg.Deps(Test.Test)
-	var rev, tag, version string
-	var err error
-
-	if rev, err = sh.Output("git", "rev-parse", "--short", "HEAD"); err != nil {
-		return fmt.Errorf("obtaining git hash: %s", err)
-	}
-
-	if tag, err = sh.Output("git", "rev-list", "--tags", "--max-count=1"); err != nil {
-		return fmt.Errorf("obtaining tag revision: %s", err)
-	}
-
-	if version, err = sh.Output("git", "describe", "--tags", tag); err != nil {
-		return fmt.Errorf("obtaining version: %s", err)
-	}
+	rev, version := rv()
 
 	date := time.Now().Format(time.RFC3339)
 
@@ -94,7 +99,9 @@ func (Test) Test() error {
 // Builds the apllication
 func Build() error {
 	fmt.Println("Building...")
-	cmd := exec.Command("go", "build")
+	rev, version := rv()
+	cmd := exec.Command("go", "build", "-ldflags",
+		fmt.Sprintf("-X main.GitCommit=%s -X main.Version=%s -X main.BuildDate=%s", rev, version, time.Now().Format(time.RFC3339)))
 	return cmd.Run()
 }
 
