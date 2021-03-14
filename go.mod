@@ -8,6 +8,7 @@ require (
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible
 	github.com/alecthomas/kong v0.2.15
+	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/davecgh/go-spew v1.1.1
 	github.com/google/uuid v1.2.0 // indirect
@@ -15,6 +16,7 @@ require (
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/magefile/mage v1.11.0
 	github.com/mitchellh/copystructure v1.1.1 // indirect
+	github.com/opsgenie/opsgenie-go-sdk-v2 v1.2.6
 	github.com/sirupsen/logrus v1.8.0
 	github.com/stretchr/testify v1.7.0
 	github.com/vmware-tanzu/velero v1.5.3
